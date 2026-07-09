@@ -1,4 +1,4 @@
-# ComfyUI + Wan 2.1 setup (Windows / RTX 4070 Ti)
+# ComfyUI + Wan 2.1 setup (Windows)
 # Works without git (uses GitHub ZIP download)
 $ErrorActionPreference = "Stop"
 
