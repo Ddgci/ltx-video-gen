@@ -38,11 +38,11 @@ REF_HINT = (
 MODEL_INFO = {
     "ltx": {
         "label": "LTX FP8（高速・省VRAM）",
-        "tip": "4070 Ti 向け。まずこちらを使う。",
+        "tip": "まずはこちらで試作するのがおすすめ。",
     },
     "ltx_fp16": {
         "label": "LTX FP16（高品質）",
-        "tip": "高品質だが VRAM 消費大（12GB では落ちやすい）。",
+        "tip": "高品質だが VRAM 消費が大きい。落ちたら FP8 に戻す。",
     },
 }
 

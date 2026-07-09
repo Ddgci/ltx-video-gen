@@ -2,7 +2,7 @@
 
 ## 概要
 
-本ツールは、ローカル GPU 上で AI モデルを動かし、テキストから動画を自動生成するアプリケーションです。
+ローカル GPU 上で **LTX-Video 2** を ComfyUI 経由で動かし、**参照画像（見た目）** と **プロンプト（動き）** から動画を生成するアプリケーションです。
 
 ---
 
@@ -21,15 +21,15 @@
 │         │ Python 呼び出し                   │ GPU 処理     │
 │         ▼                                 ▼             │
 │  ┌──────────────┐                ┌──────────────────┐   │
-│  │ wan_video_gen│                │  AI モデル         │   │
-│  │ (Python)     │                │  - Wan 2.1 1.3B  │   │
-│  │              │                │  - LTX-Video 2   │   │
+│  │ wan_video_gen│                │  LTX-Video 2     │   │
+│  │ (Python)     │                │  FP8 / FP16      │   │
 │  └──────────────┘                └──────────────────┘   │
 │                                                         │
-│  ┌──────────────┐                                       │
-│  │  output/     │ ← 生成された動画が保存される              │
-│  └──────────────┘                                       │
+│  references/  ← 参照画像（I2V）                           │
+│  output/      ← 生成動画                                  │
 └─────────────────────────────────────────────────────────┘
+
+../ComfyUI/  … 別フォルダ（models/checkpoints, text_encoders）
 ```
 
 ---
@@ -38,29 +38,32 @@
 
 ```
 wan-video-gen/
-├── app.py                          [エントリポイント] Web UI + ComfyUI 自動起動
-├── config.yaml                     [設定] モデル・解像度・接続先の定義
+├── app.py                          Web UI
+├── config.yaml                     モデル・解像度・参照画像パス
 │
-├── src/wan_video_gen/              [コアロジック]
-│   ├── __init__.py                 パッケージ定義
-│   ├── config.py                   設定ファイルの読み込み
-│   ├── comfy_client.py             ComfyUI API 通信・WebSocket 進捗監視
-│   ├── generator.py                動画生成の実行フロー
+├── src/wan_video_gen/
+│   ├── config.py                   設定読み込み
+│   ├── comfy_client.py             ComfyUI API / WebSocket
+│   ├── generator.py                T2V / I2V 切替・ワークフロー注入
+│   ├── prompt_enhancer.py          Ollama (Gemma) でプロンプト拡張
+│   ├── prompt_utils.py             LTX 向けプロンプト整形
+│   ├── reference_utils.py          参照画像一覧・ComfyUI パス解決
 │   └── batch_runner.py             CSV 一括生成
 │
-├── workflows/                      [ワークフロー定義]
-│   ├── wan_t2v_1.3b.template.json  Wan 2.1 用
-│   └── ltx_t2v_distilled.template.json  LTX-Video 2 用
+├── workflows/
+│   ├── ltx_t2v_distilled.template.json   テキストのみ
+│   └── ltx_i2v_distilled.template.json   参照画像あり
 │
-├── scripts/                        [セットアップ・運用]
-│   ├── generate.py                 CLI インターフェース
-│   ├── install_comfyui.ps1         ComfyUI インストール
-│   ├── start_comfyui.ps1           ComfyUI 手動起動
-│   └── download_models.ps1         モデルダウンロード
+├── references/                     日本の道路・車内など（ユーザー追加）
+├── scripts/
+│   ├── generate.py                 CLI
+│   ├── check_models.py             モデル存在確認
+│   ├── download_models.ps1
+│   ├── install_comfyui.ps1
+│   ├── start_comfyui.ps1
+│   └── start_ui.ps1
 │
-├── prompts/example.csv             バッチ生成用サンプル
-├── output/                         生成動画の出力先
-└── docs/                           ドキュメント
+└── output/                         生成動画
 ```
 
 ---
@@ -69,160 +72,85 @@ wan-video-gen/
 
 ```
 [ユーザー]
-    │
-    │ ① プロンプト入力 + 「動画を生成」ボタン
-    ▼
-[app.py (Gradio Web UI)]
-    │
-    │ ② GenerationRequest を作成
-    ▼
-[generator.py - VideoGenerator]
-    │
-    │ ③ ワークフロー JSON にパラメータを注入
-    │    - プロンプト
-    │    - シード値
-    │    - 解像度・フレーム数
-    ▼
-[comfy_client.py - ComfyUIClient]
-    │
-    │ ④ HTTP POST /prompt でキューに投入
-    ▼
-[ComfyUI サーバー (port 8188)]
-    │
-    │ ⑤ AI モデルで動画を生成（GPU 処理）
-    │    - テキストエンコード（UMT5 / Gemma 3）
-    │    - サンプリング（KSampler / SamplerCustom）
-    │    - VAE デコード（潜在空間 → ピクセル）
-    │    - 動画ファイル書き出し
-    │
-    │ ⑥ WebSocket で進捗通知
-    │    "progress": { "value": 15, "max": 30 }
-    ▼
-[comfy_client.py]
-    │
-    │ ⑦ 完了検知 → HTTP GET /view でファイルダウンロード
-    ▼
-[generator.py]
-    │
-    │ ⑧ output/ フォルダに保存
+    │ 参照画像（任意）+ プロンプト
     ▼
 [app.py]
-    │
-    │ ⑨ 動画プレビュー + 情報表示
+    │ Gemma 拡張（任意）→ prepare_ltx_prompt
     ▼
-[ユーザーのブラウザに動画が表示される]
+[generator.py]
+    │ 参照画像あり → I2V ワークフロー
+    │ 参照画像なし → T2V ワークフロー
+    │ 解像度・フレーム・シード・image_strength を JSON に注入
+    ▼
+[comfy_client.py]  POST /prompt
+    ▼
+[ComfyUI]  Gemma 3 エンコード → LTX サンプリング → VAE → MP4
+    │ WebSocket 進捗
+    ▼
+[output/]  保存 → UI プレビュー
 ```
 
 ---
 
-## 使用技術スタック
+## 使用技術
 
 ### AI モデル
 
-| モデル | 開発元 | パラメータ数 | 特徴 |
-|--------|--------|-------------|------|
-| **Wan 2.1 T2V 1.3B** | Wan-AI (Alibaba系) | 13億 | 高品質・日本語対応・汎用 |
-| **LTX-Video 2 Distilled** | Lightricks | 190億 (FP8量子化) | 高速(8steps)・英語特化 |
+| モデル | ファイル | 用途 |
+|--------|---------|------|
+| LTX FP8 | `ltx-2-19b-distilled-fp8.safetensors` | デフォルト・省 VRAM |
+| LTX FP16 | `ltx-2-19b-distilled.safetensors` | 高品質（任意） |
+| Gemma 3 12B | `gemma_3_12B_it_fp4_mixed.safetensors` | テキストエンコーダ（必須） |
 
-### フレームワーク・ライブラリ
+### その他
 
-| 技術 | 用途 | バージョン |
-|------|------|-----------|
-| **ComfyUI** | AI モデル実行エンジン | 0.27+ |
-| **PyTorch** | GPU 計算フレームワーク | 2.5+ (CUDA 12.4) |
-| **Gradio** | Web UI フレームワーク | 6.x |
-| **Python** | メイン言語 | 3.10+ |
-| **websocket-client** | WebSocket 通信 | 1.6+ |
-| **requests** | HTTP 通信 | 2.31+ |
-| **PyYAML** | 設定ファイル読み込み | 6.0+ |
-
-### AI パイプライン詳細
-
-```
-テキスト入力
-    │
-    ▼
-[Text Encoder]
-    Wan: UMT5-XXL (FP8) — 多言語対応の大規模言語モデル
-    LTX: Gemma 3 12B (FP4) — Google の軽量言語モデル
-    │
-    ▼
-[Diffusion Model / Sampler]
-    Wan: Wan2.1 DiT 1.3B — 拡散変換モデル (30 steps, CFG=6)
-    LTX: LTX-Video 19B Distilled — 蒸留済み拡散モデル (8 steps, CFG=1)
-    │
-    ▼
-[VAE Decoder]
-    潜在空間の数値データ → 実際のピクセル（映像フレーム）に変換
-    │
-    ▼
-[Video Encoder]
-    フレーム列 → MP4 動画ファイル (H.264)
-```
+| 技術 | 用途 |
+|------|------|
+| ComfyUI 0.27+ | ワークフロー実行 |
+| Gradio 6.x | Web UI |
+| Ollama + Gemma 7B | プロンプト英語拡張（任意） |
 
 ---
 
-## 設定ファイル (config.yaml) の構造
+## config.yaml（要点）
 
 ```yaml
-active_model: "wan"          # デフォルトモデル
+active_model: "ltx"
 
-comfyui:
-  host: "127.0.0.1"          # ComfyUI のアドレス
-  port: 8188                  # ComfyUI のポート
+references:
+  dir: "references"
 
 models:
-  wan:                        # Wan 2.1 の設定
-    name: "Wan 2.1 T2V 1.3B"
-    width: 832                # 生成する動画の横幅
-    height: 480               # 高さ
-    num_frames: 81            # フレーム数 (81 ÷ 16fps = 約5秒)
-    fps: 16
-    steps: 30                 # サンプリング回数（多い=高品質・遅い）
-    cfg: 6.0                  # プロンプトへの忠実度
-    ...
-
-  ltx:                        # LTX-Video 2 の設定
-    name: "LTX-Video 2 Distilled"
-    width: 768
-    height: 512
-    num_frames: 97            # (97 ÷ 24fps = 約4秒)
-    fps: 24
-    steps: 8                  # 蒸留モデルなので少ないステップで OK
-    cfg: 1.0
-    ...
+  ltx:      # FP8 — checkpoint + i2v_workflow_path
+  ltx_fp16: # FP16 — 別チェックポイント、同ワークフロー
 ```
+
+I2V 時は `image_node_id`（LoadImage）と `i2v_latent_node_id`（LTXVImgToVideo）にパラメータを流し込みます。
 
 ---
 
-## 通信プロトコル
+## ComfyUI API
 
-### ComfyUI API
-
-| エンドポイント | メソッド | 用途 |
-|---------------|---------|------|
-| `/system_stats` | GET | 接続確認 |
-| `/prompt` | POST | ワークフロー投入 |
-| `/history/{prompt_id}` | GET | 生成結果取得 |
-| `/view?filename=...` | GET | ファイルダウンロード |
-| `ws://host:port/ws` | WebSocket | リアルタイム進捗 |
-
-### WebSocket メッセージ
-
-```json
-{"type": "progress", "data": {"value": 15, "max": 30}}
-{"type": "executing", "data": {"node": "3", "prompt_id": "xxx"}}
-{"type": "executing", "data": {"node": null, "prompt_id": "xxx"}}  ← 完了
-```
+| エンドポイント | 用途 |
+|---------------|------|
+| `/queue` | 接続確認（`/system_stats` は 500 になる版がある） |
+| `/prompt` | ワークフロー投入 |
+| `/history/{id}` | 結果取得 |
+| `/view` | ファイル取得 |
+| WebSocket | 進捗 |
 
 ---
 
-## VRAM 使用量の目安
+## VRAM の目安
 
-| モデル | 解像度 | VRAM 使用量 |
-|--------|--------|------------|
-| Wan 2.1 1.3B | 832×480 | 約 8〜10 GB |
-| Wan 2.1 1.3B | 1280×720 | 約 11〜12 GB |
-| LTX-Video 2 FP8 | 768×512 | 約 10〜12 GB |
+| 設定 | 目安 |
+|------|------|
+| LTX FP8, 768×432, 49f, I2V | 動作しやすい |
+| LTX FP16, 768×480, 65f, I2V | OOM しやすい |
 
+---
 
+## 関連ドキュメント
+
+- [manual.md](manual.md) — 画面・作り方・注意点
+- [README.md](../README.md) — セットアップ
