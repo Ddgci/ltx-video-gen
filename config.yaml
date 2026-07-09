@@ -1,0 +1,68 @@
+# === Video Generation Config (LTX-Video 2) ===
+active_model: "ltx"
+
+comfyui:
+  host: "127.0.0.1"
+  port: 8188
+  install_dir: ""
+
+references:
+  dir: "references"
+
+models:
+  ltx:
+    name: "LTX-Video 2 Distilled (FP8)"
+    width: 768
+    height: 432
+    num_frames: 49
+    fps: 24
+    steps: 8
+    cfg: 1.0
+    seed: -1
+    image_strength: 0.75
+    checkpoint_name: "ltx-2-19b-distilled-fp8.safetensors"
+    text_encoder_name: "gemma_3_12B_it_fp4_mixed.safetensors"
+    workflow_path: "workflows/ltx_t2v_distilled.template.json"
+    i2v_workflow_path: "workflows/ltx_i2v_distilled.template.json"
+    prompt_node_id: "6"
+    negative_prompt_node_id: "7"
+    seed_node_id: "123"
+    cfg_node_id: "127"
+    audio_latent_node_id: "115"
+    seed_field: "noise_seed"
+    latent_node_id: "70"
+    i2v_latent_node_id: "72"
+    image_node_id: "71"
+    fps_node_id: "49"
+
+  ltx_fp16:
+    name: "LTX-Video 2 Distilled (FP16)"
+    width: 768
+    height: 480
+    num_frames: 65
+    fps: 24
+    steps: 8
+    cfg: 1.0
+    seed: -1
+    image_strength: 0.75
+    checkpoint_name: "ltx-2-19b-distilled.safetensors"
+    text_encoder_name: "gemma_3_12B_it_fp4_mixed.safetensors"
+    workflow_path: "workflows/ltx_t2v_distilled.template.json"
+    i2v_workflow_path: "workflows/ltx_i2v_distilled.template.json"
+    prompt_node_id: "6"
+    negative_prompt_node_id: "7"
+    seed_node_id: "123"
+    cfg_node_id: "127"
+    audio_latent_node_id: "115"
+    seed_field: "noise_seed"
+    latent_node_id: "70"
+    i2v_latent_node_id: "72"
+    image_node_id: "71"
+    fps_node_id: "49"
+
+output:
+  dir: "output"
+
+batch:
+  prompts_file: "prompts/example.csv"
+  delay_seconds: 2

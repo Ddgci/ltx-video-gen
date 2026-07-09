@@ -1,0 +1,4 @@
+prompt,negative_prompt,seed
+"A cat walking on a sunny beach, cinematic lighting, 4k quality","blurry, low quality, distorted",-1
+"Tokyo street at night with neon lights, rain reflections, cyberpunk","blurry, low quality, watermark",42
+"Mountain landscape with clouds moving, timelapse style, epic","blurry, ugly, deformed",-1

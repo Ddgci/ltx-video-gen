@@ -1,0 +1,178 @@
+{
+  "38": {
+    "inputs": {
+      "text_encoder": "gemma_3_12B_it_fp4_mixed.safetensors",
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors",
+      "device": "default"
+    },
+    "class_type": "LTXAVTextEncoderLoader",
+    "_meta": { "title": "Load LTXAV Text Encoder" }
+  },
+  "44": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": { "title": "Load LTX-Video 2 Distilled" }
+  },
+  "101": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors"
+    },
+    "class_type": "LTXVAudioVAELoader",
+    "_meta": { "title": "Load LTXV Audio VAE" }
+  },
+  "6": {
+    "inputs": {
+      "text": "A car begins turning right at a Japanese intersection. Smooth cinematic motion.",
+      "clip": ["38", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "Positive Prompt (motion & action)" }
+  },
+  "7": {
+    "inputs": {
+      "text": "",
+      "clip": ["38", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "Negative Prompt (empty for distilled)" }
+  },
+  "69": {
+    "inputs": {
+      "frame_rate": 24,
+      "positive": ["6", 0],
+      "negative": ["7", 0]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": { "title": "LTXV Conditioning" }
+  },
+  "71": {
+    "inputs": {
+      "image": "reference.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Look Reference Image" }
+  },
+  "72": {
+    "inputs": {
+      "positive": ["69", 0],
+      "negative": ["69", 1],
+      "vae": ["44", 2],
+      "image": ["71", 0],
+      "width": 768,
+      "height": 432,
+      "length": 49,
+      "batch_size": 1,
+      "strength": 0.75
+    },
+    "class_type": "LTXVImgToVideo",
+    "_meta": { "title": "LTX Image To Video" }
+  },
+  "115": {
+    "inputs": {
+      "audio_vae": ["101", 0],
+      "frames_number": 49,
+      "frame_rate": 24,
+      "batch_size": 1
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": { "title": "Empty LTXV Audio Latent" }
+  },
+  "132": {
+    "inputs": {
+      "video_latent": ["72", 2],
+      "audio_latent": ["115", 0]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": { "title": "Concat AV Latent" }
+  },
+  "127": {
+    "inputs": {
+      "model": ["44", 0],
+      "positive": ["72", 0],
+      "negative": ["72", 1],
+      "cfg": 1.0
+    },
+    "class_type": "CFGGuider",
+    "_meta": { "title": "CFG Guider" }
+  },
+  "123": {
+    "inputs": {
+      "noise_seed": 42
+    },
+    "class_type": "RandomNoise",
+    "_meta": { "title": "Random Noise" }
+  },
+  "126": {
+    "inputs": {
+      "sampler_name": "euler_ancestral"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": { "title": "Sampler Select" }
+  },
+  "176": {
+    "inputs": {
+      "sigmas": "1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": { "title": "Distilled Sigmas" }
+  },
+  "125": {
+    "inputs": {
+      "noise": ["123", 0],
+      "guider": ["127", 0],
+      "sampler": ["126", 0],
+      "sigmas": ["176", 0],
+      "latent_image": ["132", 0]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": { "title": "Sampler" }
+  },
+  "133": {
+    "inputs": {
+      "av_latent": ["125", 1]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": { "title": "Separate AV Latent" }
+  },
+  "119": {
+    "inputs": {
+      "samples": ["133", 0],
+      "vae": ["44", 2],
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 4096,
+      "temporal_overlap": 8
+    },
+    "class_type": "VAEDecodeTiled",
+    "_meta": { "title": "VAE Decode Tiled" }
+  },
+  "120": {
+    "inputs": {
+      "samples": ["133", 1],
+      "audio_vae": ["101", 0]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": { "title": "Audio VAE Decode" }
+  },
+  "49": {
+    "inputs": {
+      "fps": 24,
+      "images": ["119", 0],
+      "audio": ["120", 0]
+    },
+    "class_type": "CreateVideo",
+    "_meta": { "title": "Create Video" }
+  },
+  "50": {
+    "inputs": {
+      "filename_prefix": "video/ltx_i2v_output",
+      "format": "auto",
+      "codec": "auto",
+      "video": ["49", 0]
+    },
+    "class_type": "SaveVideo",
+    "_meta": { "title": "Save Video" }
+  }
+}
